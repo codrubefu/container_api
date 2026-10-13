@@ -3,10 +3,16 @@
 namespace App\Providers;
 
 use App\Contracts\SmsSender;
+use App\Database\SqlServer2014SchemaGrammar;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\Sms\LogSmsSender;
+use Dedoc\Scramble\Scramble;
+use Dedoc\Scramble\Support\Generator\OpenApi;
+use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Connection;
+use Illuminate\Database\SqlServerConnection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -25,6 +31,13 @@ class AppServiceProvider extends ServiceProvider
             'log' => new LogSmsSender,
             default => throw new InvalidArgumentException('Unsupported SMS driver ['.config('services.sms.driver').'].'),
         });
+
+        Connection::resolverFor('sqlsrv', function ($pdo, string $database, string $prefix, array $config): SqlServerConnection {
+            $connection = new SqlServerConnection($pdo, $database, $prefix, $config);
+            $connection->setSchemaGrammar(new SqlServer2014SchemaGrammar($connection));
+
+            return $connection;
+        });
     }
 
     /**
@@ -34,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureAuthorization();
         $this->configureRateLimiting();
+        $this->configureApiDocumentation();
     }
 
     /**
@@ -64,6 +78,16 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perMinute(10)->by('challenge:'.$request->string('challenge_id').'|'.$request->ip()),
                 Limit::perMinute(30)->by('challenge-ip:'.$request->ip()),
             ];
+        });
+    }
+
+    /**
+     * Documents Sanctum token auth so the docs UI can send `Authorization: Bearer <token>`.
+     */
+    private function configureApiDocumentation(): void
+    {
+        Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi): void {
+            $openApi->secure(SecurityScheme::http('bearer'));
         });
     }
 }

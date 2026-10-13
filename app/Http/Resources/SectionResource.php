@@ -21,6 +21,7 @@ class SectionResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'pending_count' => $this->whenCounted('pending', fn (mixed $count): int => (int) $count),
         ];
     }
 }
